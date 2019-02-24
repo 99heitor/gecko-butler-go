@@ -28,10 +28,13 @@ func main() {
 			continue
 		}
 
-		if update.Message.Chat.IsGroup() {
-			log.Printf("Request from user: %s", update.Message.Chat.Title)
+		if update.Message.Chat.IsGroup() || update.Message.Chat.IsSuperGroup() {
+			log.Printf("Request from chat: %s", update.Message.Chat.Title)
 		} else {
-			log.Printf("Request from chat: %s", update.Message.Chat.UserName)
+			log.Printf("Request from user: %s", update.Message.Chat.UserName)
+		}
+		if bot.Debug {
+			log.Printf("Update: %v", update.Message.Text)
 		}
 
 		command := update.Message.Command()
