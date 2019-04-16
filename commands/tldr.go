@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"html"
 	"log"
 	"net/url"
 	"os"
@@ -45,9 +46,12 @@ func Summarize(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			for _, sentence := range sentences {
 				body = append(body, strings.TrimSpace(sentence))
 			}
-			log.Printf("Answering with summary \"%s\"...", decodeTrash(smmryResponse.Title))
+
+			title := html.UnescapeString(decodeTrash(smmryResponse.Title))
+			text := html.UnescapeString(strings.Join(body, "\n"))
+			log.Printf("Answering with summary \"%s\"...", title)
 			answer = fmt.Sprintf("@%s is too lazy to read.\n\n*%s*\n%s",
-				update.Message.From.UserName, smmryResponse.Title, strings.Join(body, "\n"))
+				update.Message.From.UserName, title, text)
 		}
 	}
 
