@@ -1,14 +1,21 @@
 package commands
 
 import (
-	"context"
 	"log"
+	"net/http"
 	"os"
 	"regexp"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/zmb3/spotify"
-	"golang.org/x/oauth2/clientcredentials"
+)
+
+var (
+	redirectURI = os.Getenv("APP_URL") + "/callback"
+	// redirectURI = "https://b42a330a.ngrok.io/callback"
+	auth  = spotify.NewAuthenticator(redirectURI, spotify.ScopePlaylistModifyPublic, spotify.ScopePlaylistModifyPrivate)
+	ch    = make(chan *spotify.Client)
+	state = "abc123"
 )
 
 func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
@@ -34,19 +41,30 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		spotifyUrl := match[1]
 		answer = "You're requesting song " + spotifyUrl
 
-		config := &clientcredentials.Config{
-			ClientID:     os.Getenv("SPOTIFY_ID"),
-			ClientSecret: os.Getenv("SPOTIFY_SECRET"),
-			TokenURL:     spotify.TokenURL,
-		}
+		http.HandleFunc("/callback", completeAuth)
 
-		token, err := config.Token(context.Background())
+		url := auth.AuthURL(state)
+		log.Printf("Log in to spotify in the following url %v", url)
+
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, url)
+		msg.ReplyToMessageID = update.Message.MessageID
+		msg.ParseMode = "Markdown"
+
+		sentmsg, err := bot.Send(msg)
 		if err != nil {
-			log.Printf("Couldn't get token: %v", err)
-			break
+			log.Printf("Couldn't send authorization URI as message. Error: %v", err)
+		} else {
+			log.Print(sentmsg)
 		}
 
-		client := spotify.Authenticator{}.NewClient(token)
+		client := <-ch
+
+		user, err := client.CurrentUser()
+		if err != nil {
+			log.Printf("Couldn't get current user. Error: %v", err)
+		} else {
+			log.Printf("Current user %v", user.DisplayName)
+		}
 
 		playlist, err := client.GetPlaylist("7cwB93saz58vHF9NAOBBFk")
 		if err != nil {
@@ -73,4 +91,19 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	msg.ReplyToMessageID = update.Message.MessageID
 	msg.ParseMode = "Markdown"
 	bot.Send(msg)
+}
+
+func completeAuth(w http.ResponseWriter, r *http.Request) {
+	tok, err := auth.Token(state, r)
+	if err != nil {
+		log.Printf("Couldn't get token. Error %v", err)
+	}
+
+	if st := r.FormValue("state"); st != state {
+		log.Printf("State mismatch. Error %v", err)
+	}
+
+	client := auth.NewClient(tok)
+	log.Printf("Login completed")
+	ch <- &client
 }
