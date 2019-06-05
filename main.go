@@ -53,6 +53,9 @@ func main() {
 		case strings.EqualFold(command, "scihub"):
 			commands.SciHub(bot, update)
 
+		case strings.EqualFold(command, "addchapinhasmood"):
+			commands.AddChapinhasMood(bot, update)
+
 		case strings.EqualFold(command, "debug") && update.Message.Chat.ID == 36992723:
 			rsp := fmt.Sprintf("Switching debug mode to %t", !bot.Debug)
 			log.Printf(rsp)
