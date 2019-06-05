@@ -2,15 +2,18 @@ package commands
 
 import (
 	// "context"
+	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"log"
 	"net/http"
 	"os"
 	"regexp"
-	"crypto/rand"
-	"encoding/base64"
+
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/zmb3/spotify"
-	// "google.golang.org/appengine/datastore"
+	"golang.org/x/oauth2"
+	"google.golang.org/appengine/datastore"
 )
 
 var (
@@ -38,56 +41,69 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		if (len(match)) == 0 {
 			log.Printf("Didn't find a Spotify url.")
 			break
- 		}
+		}
 		spotifyUrl := match[1]
 		answer = "You're requesting song " + spotifyUrl
 
-		state, err := GenerateRandomString(64)
+		ctx := context.Background()
+		key := datastore.NewKey(ctx, "oauth2.Token", "token", 0, nil)
+		log.Printf("Created key: %v", key)
+
+		var token oauth2.Token
+
+		err = datastore.Get(ctx, key, &token)
+
+		//Don't have any stored token, will have to obtain it
+		//now
 		if err != nil {
-			log.Printf("Couldn't generate random state")
-		}
 
-		url := auth.AuthURL(state)
-		log.Printf("Log in to spotify in the following url %v", url)
-
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, url)
-		msg.ReplyToMessageID = update.Message.MessageID
-
-		_, err = bot.Send(msg)
-		if err != nil {
-			log.Printf("Couldn't send authorization URI as message. Error: %v", err)
-		}
-
-		http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-			tok, err := auth.Token(state, r)
+			state, err := GenerateRandomString(64)
 			if err != nil {
-				log.Printf("Couldn't get token. Error %v", err)
-				http.Error(w, "Couldn't get token", http.StatusForbidden)
-				return
+				log.Printf("Couldn't generate random state")
 			}
 
-			// ctx := context.Background()
+			url := auth.AuthURL(state)
+			log.Printf("Log in to spotify in the following url %v", url)
 
-			// key := datastore.NewKey(ctx, "*oauth2.Token", "token", 0, nil)
-			// log.Printf("Created key: %v", key)
-			// _, err = datastore.Put(ctx, key, &tok)
-			// if err != nil {
-			// 	log.Printf("Failed storing token %v with error: %v", tok, err)
-			// 	http.Error(w, "Couldn't store token", http.StatusForbidden)
-			// 	return
-			// }
-			// log.Printf("Stored token with key %v", key)
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, url)
+			msg.ReplyToMessageID = update.Message.MessageID
 
-			if st := r.FormValue("state"); st != state {
-				log.Printf("State mismatch. Error %v", err)
-				http.NotFound(w, r)
-				return
+			_, err = bot.Send(msg)
+			if err != nil {
+				log.Printf("Couldn't send authorization URI as message. Error: %v", err)
 			}
 
-			client := auth.NewClient(tok)
+			http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+				tok, err := auth.Token(state, r)
+				if err != nil {
+					log.Printf("Couldn't get token. Error %v", err)
+					http.Error(w, "Couldn't get token", http.StatusForbidden)
+					return
+				}
+
+				_, err = datastore.Put(ctx, key, &tok)
+				if err != nil {
+					log.Printf("Failed storing token %v with error: %v", tok, err)
+					http.Error(w, "Couldn't store token", http.StatusForbidden)
+					return
+				}
+				log.Printf("Stored token with key %v", key)
+
+				if st := r.FormValue("state"); st != state {
+					log.Printf("State mismatch. Error %v", err)
+					http.NotFound(w, r)
+					return
+				}
+
+				client := auth.NewClient(tok)
+				log.Printf("Login completed")
+				ch <- &client
+			})
+		} else {
+			client := auth.NewClient(&token)
 			log.Printf("Login completed")
 			ch <- &client
-		});
+		}
 
 		client := <-ch
 
@@ -133,7 +149,6 @@ func GenerateRandomBytes(n int) ([]byte, error) {
 	}
 	return b, nil
 }
-
 
 func GenerateRandomString(s int) (string, error) {
 	b, err := GenerateRandomBytes(s)
