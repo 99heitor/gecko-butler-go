@@ -81,7 +81,7 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 					return
 				}
 
-				_, err = datastore.Put(ctx, key, &tok)
+				_, err = datastore.Put(ctx, key, tok)
 				if err != nil {
 					log.Printf("Failed storing token %v with error: %v", tok, err)
 					http.Error(w, "Couldn't store token", http.StatusForbidden)
