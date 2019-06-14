@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 	"regexp"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -82,6 +83,7 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 				}
 
 				_, err = datastore.Put(ctx, key, tok)
+				log.Printf("Token has type %v", reflect.TypeOf(key).Kind())
 				if err != nil {
 					log.Printf("Failed storing token %v with error: %v", tok, err)
 					http.Error(w, "Couldn't store token", http.StatusForbidden)
