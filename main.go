@@ -25,6 +25,7 @@ func main() {
 	go http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 
 	appengine.Main()
+	log.Printf("Called appengine.Main()")
 
 	for update := range updates {
 		if update.Message == nil {
