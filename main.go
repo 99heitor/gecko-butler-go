@@ -9,6 +9,7 @@ import (
 
 	"github.com/99heitor/gecko-butler-go/commands"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"google.golang.org/appengine"
 )
 
 func main() {
@@ -22,6 +23,8 @@ func main() {
 
 	log.Printf("Listening on port %s", port)
 	go http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
+
+	appengine.Main()
 
 	for update := range updates {
 		if update.Message == nil {
