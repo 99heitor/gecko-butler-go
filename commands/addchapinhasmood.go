@@ -112,7 +112,7 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		} else {
 			client := auth.NewClient(&token)
 			log.Printf("Login completed")
-			ch <- &client
+			go func() { ch <- &client }()
 		}
 
 		client := <-ch
