@@ -1,7 +1,6 @@
 package commands
 
 import (
-	// "context"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -11,10 +10,10 @@ import (
 	"reflect"
 	"regexp"
 
+	"cloud.google.com/go/datastore"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/zmb3/spotify"
 	"golang.org/x/oauth2"
-	"google.golang.org/appengine/datastore"
 )
 
 var (
@@ -47,12 +46,21 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		answer = "You're requesting song " + spotifyUrl
 
 		ctx := context.Background()
-		key := datastore.NewKey(ctx, "oauth2.Token", "token", 0, nil)
+		projectID := "geckobutler"
+
+		datastoreClient, err := datastore.NewClient(ctx, projectID)
+		if err != nil {
+			log.Printf("Failed to create client: %v", err)
+		}
+
+		kind := "oauth2.Token"
+		name := "spotifyToken"
+		key := datastore.NameKey(kind, name, nil)
 		log.Printf("Created key: %v", key)
 
 		var token oauth2.Token
 
-		err = datastore.Get(ctx, key, &token)
+		err = datastoreClient.Get(ctx, key, &token)
 
 		//Don't have any stored token, will have to obtain it
 		//now
@@ -82,7 +90,7 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 					return
 				}
 
-				_, err = datastore.Put(ctx, key, tok)
+				_, err = datastoreClient.Put(ctx, key, tok)
 				log.Printf("Token has type %v", reflect.TypeOf(key).Kind())
 				if err != nil {
 					log.Printf("Failed storing token %v with error: %v", tok, err)
