@@ -25,23 +25,23 @@ var (
 func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	var answer = "Doesn't look like a song to me."
 	message := update.Message
-	switch {
-	case message.ReplyToMessage == nil:
-		answer = "Use the command /addchapinhasmood as a reply to a Spotify link."
-	case message.ReplyToMessage.Text == "":
-		answer = "Sorry, this is not a Spotify link."
-	default:
-		var re, err = regexp.Compile(`https://open\.spotify\.com/track/([[:alnum:]]+)`)
-		if err != nil {
-			log.Printf("Failed to compile regex: %v", err)
-			return
-		}
-		text := message.ReplyToMessage.Text
-		match := re.FindStringSubmatch(text)
-		if (len(match)) == 0 {
-			log.Printf("Didn't find a Spotify url.")
-			break
-		}
+	string := ""
+	if message.ReplyToMessage != nil && message.ReplyToMessage.Text != nil {
+		string = message.ReplyToMessage.Text
+	} if message.Text != nil {
+		string = string + " " + message.Text 
+	}
+
+	var re, err = regexp.Compile(`https://open\.spotify\.com/track/([[:alnum:]]+)`)
+	if err != nil {
+		log.Printf("Failed to compile regex: %v", err)
+		return
+	}
+	
+	match := re.FindStringSubmatch(string)
+	if (len(match)) == 0 {
+		answer = "Spotify link not found. Use the command /addchapinhasmood containing as a reply to a Spotify link."
+	} else {
 		spotifyUrl := match[1]
 		answer = "You're requesting song " + spotifyUrl
 
