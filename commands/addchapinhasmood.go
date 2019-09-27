@@ -177,7 +177,7 @@ func ProximoChapinha(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	var chapinhas []string
 
 	_, err = datastoreClient.GetAll(ctx, query, &chapinhas)
-
+	log.Printf("Chapinhas result", chapinhas)
 	results := []interface{}{}
 
 	if err == nil {
