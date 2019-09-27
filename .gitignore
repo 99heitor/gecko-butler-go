@@ -13,6 +13,7 @@
 
 #vscode
 .vscode/
+.idea/
 
 # Secrets
 vision_key.json

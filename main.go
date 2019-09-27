@@ -24,7 +24,17 @@ func main() {
 	go http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 
 	for update := range updates {
-		if update.Message == nil {
+		if update.Message == nil && update.InlineQuery == nil {
+			continue
+		}
+
+		if update.InlineQuery != nil {
+			inlinequery := update.InlineQuery
+			log.Printf("Inline Query: %v", inlinequery.Query)
+			switch {
+			case strings.EqualFold(inlinequery.Query, "proximochapinha"):
+				commands.ProximoChapinha(bot, update)
+			}
 			continue
 		}
 
@@ -65,6 +75,7 @@ func main() {
 			msg.ReplyToMessageID = update.Message.MessageID
 			bot.Send(msg)
 		}
+
 	}
 }
 

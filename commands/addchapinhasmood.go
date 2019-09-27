@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"log"
+
 	"net/http"
 	"os"
 	"reflect"
@@ -160,6 +161,39 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	msg.ReplyToMessageID = update.Message.MessageID
 	msg.ParseMode = "Markdown"
 	bot.Send(msg)
+}
+
+func ProximoChapinha(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	ctx := context.Background()
+	projectID := "geckobutler"
+
+	datastoreClient, err := datastore.NewClient(ctx, projectID)
+	if err != nil {
+		log.Printf("Failed to create client: %v", err)
+	}
+
+	query := datastore.NewQuery("Chapinha").Filter("Chosen = ", false).Order("LastChosen").KeysOnly()
+
+	var chapinhas []string
+
+	_, err = datastoreClient.GetAll(ctx, query, &chapinhas)
+
+	results := []interface{}{}
+
+	if err != nil {
+		for _, v := range chapinhas {
+			results = append(results, tgbotapi.NewInlineQueryResultArticle(update.InlineQuery.ID, v, v))
+		}
+	}
+
+	inlineConf := tgbotapi.InlineConfig{
+		InlineQueryID: update.InlineQuery.ID,
+		Results:       results,
+	}
+
+	if _, err := bot.AnswerInlineQuery(inlineConf); err != nil {
+		log.Println(err)
+	}
 }
 
 func GenerateRandomBytes(n int) ([]byte, error) {
