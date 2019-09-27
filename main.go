@@ -24,7 +24,13 @@ func main() {
 	go http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 
 	for update := range updates {
-		if update.Message == nil && update.InlineQuery == nil {
+		if update.Message == nil && update.InlineQuery == nil && update.ChosenInlineResult == nil {
+			continue
+		}
+
+		if update.ChosenInlineResult != nil {
+			chosenInlineResult := update.ChosenInlineResult
+			log.Printf("Chose chapinha: %v", chosenInlineResult.ResultID)
 			continue
 		}
 

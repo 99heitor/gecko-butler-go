@@ -180,9 +180,9 @@ func ProximoChapinha(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 	results := []interface{}{}
 
-	if err != nil {
+	if err == nil {
 		for _, v := range chapinhas {
-			results = append(results, tgbotapi.NewInlineQueryResultArticle(update.InlineQuery.ID, v, v))
+			results = append(results, tgbotapi.NewInlineQueryResultArticle(v, v, v))
 		}
 	}
 
