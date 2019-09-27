@@ -23,126 +23,137 @@ var (
 )
 
 func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	var answer = "Doesn't look like a song to me."
+	var answer string
+	error := false
 	message := update.Message
 	string := ""
-	if message.ReplyToMessage != nil && message.ReplyToMessage.Text != nil {
+	if message.ReplyToMessage != nil && message.ReplyToMessage.Text != "" {
 		string = message.ReplyToMessage.Text
-	} if message.Text != nil {
-		string = string + " " + message.Text 
 	}
-
+	if message.Text != "" {
+		string = string + " " + message.Text
+	}
+	log.Printf("Message %s", string)
 	var re, err = regexp.Compile(`https://open\.spotify\.com/track/([[:alnum:]]+)`)
 	if err != nil {
 		log.Printf("Failed to compile regex: %v", err)
-		return
+		error = true
 	}
-	
+
 	match := re.FindStringSubmatch(string)
 	if (len(match)) == 0 {
+		error = true
 		answer = "Spotify link not found. Use the command /addchapinhasmood containing as a reply to a Spotify link."
-	} else {
-		spotifyUrl := match[1]
-		answer = "You're requesting song " + spotifyUrl
+	}
 
-		ctx := context.Background()
-		projectID := "geckobutler"
+	spotifyUrl := match[1]
+	log.Printf("You're requesting song " + spotifyUrl)
 
-		datastoreClient, err := datastore.NewClient(ctx, projectID)
+	ctx := context.Background()
+	projectID := "geckobutler"
+
+	datastoreClient, err := datastore.NewClient(ctx, projectID)
+	if err != nil {
+		log.Printf("Failed to create client: %v", err)
+		error = true
+	}
+
+	kind := "oauth2.Token"
+	name := "spotifyToken"
+	key := datastore.NameKey(kind, name, nil)
+	log.Printf("Created key: %v", key)
+
+	var token oauth2.Token
+
+	err = datastoreClient.Get(ctx, key, &token)
+
+	//Don't have any stored token, will have to obtain it
+	//now
+	if err != nil {
+
+		state, err := GenerateRandomString(64)
 		if err != nil {
-			log.Printf("Failed to create client: %v", err)
+			log.Printf("Couldn't generate random state")
+			error = true
 		}
 
-		kind := "oauth2.Token"
-		name := "spotifyToken"
-		key := datastore.NameKey(kind, name, nil)
-		log.Printf("Created key: %v", key)
+		url := auth.AuthURL(state)
+		log.Printf("Log in to spotify in the following url %v", url)
 
-		var token oauth2.Token
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, url)
+		msg.ReplyToMessageID = update.Message.MessageID
 
-		err = datastoreClient.Get(ctx, key, &token)
-
-		//Don't have any stored token, will have to obtain it
-		//now
+		_, err = bot.Send(msg)
 		if err != nil {
+			log.Printf("Couldn't send authorization URI as message. Error: %v", err)
+			error = true
+		}
 
-			state, err := GenerateRandomString(64)
+		http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+			tok, err := auth.Token(state, r)
 			if err != nil {
-				log.Printf("Couldn't generate random state")
+				log.Printf("Couldn't get token. Error %v", err)
+				http.Error(w, "Couldn't get token", http.StatusForbidden)
+				return
 			}
 
-			url := auth.AuthURL(state)
-			log.Printf("Log in to spotify in the following url %v", url)
-
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, url)
-			msg.ReplyToMessageID = update.Message.MessageID
-
-			_, err = bot.Send(msg)
+			_, err = datastoreClient.Put(ctx, key, tok)
+			log.Printf("Token has type %v", reflect.TypeOf(key).Kind())
 			if err != nil {
-				log.Printf("Couldn't send authorization URI as message. Error: %v", err)
+				log.Printf("Failed storing token %v with error: %v", tok, err)
+				http.Error(w, "Couldn't store token", http.StatusForbidden)
+				return
+			}
+			log.Printf("Stored token with key %v", key)
+
+			if st := r.FormValue("state"); st != state {
+				log.Printf("State mismatch. Error %v", err)
+				http.NotFound(w, r)
+				return
 			}
 
-			http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-				tok, err := auth.Token(state, r)
-				if err != nil {
-					log.Printf("Couldn't get token. Error %v", err)
-					http.Error(w, "Couldn't get token", http.StatusForbidden)
-					return
-				}
-
-				_, err = datastoreClient.Put(ctx, key, tok)
-				log.Printf("Token has type %v", reflect.TypeOf(key).Kind())
-				if err != nil {
-					log.Printf("Failed storing token %v with error: %v", tok, err)
-					http.Error(w, "Couldn't store token", http.StatusForbidden)
-					return
-				}
-				log.Printf("Stored token with key %v", key)
-
-				if st := r.FormValue("state"); st != state {
-					log.Printf("State mismatch. Error %v", err)
-					http.NotFound(w, r)
-					return
-				}
-
-				client := auth.NewClient(tok)
-				log.Printf("Login completed")
-				ch <- &client
-			})
-		} else {
-			client := auth.NewClient(&token)
+			client := auth.NewClient(tok)
 			log.Printf("Login completed")
-			go func() { ch <- &client }()
-		}
+			ch <- &client
+		})
+	} else {
+		client := auth.NewClient(&token)
+		log.Printf("Login completed")
+		go func() { ch <- &client }()
+	}
 
-		client := <-ch
+	client := <-ch
 
-		user, err := client.CurrentUser()
-		if err != nil {
-			log.Printf("Couldn't get current user. Error: %v", err)
-		} else {
-			log.Printf("Current user %v", user.DisplayName)
-		}
+	user, err := client.CurrentUser()
+	if err != nil {
+		log.Printf("Couldn't get current user. Error: %v", err)
+		error = true
+	} else {
+		log.Printf("Current user %v", user.DisplayName)
+	}
 
-		playlist, err := client.GetPlaylist("7cwB93saz58vHF9NAOBBFk")
-		if err != nil {
-			log.Printf("Couldn't get playlist: %v", err)
-			break
-		}
+	playlist, err := client.GetPlaylist("7cwB93saz58vHF9NAOBBFk")
+	if err != nil {
+		log.Printf("Couldn't get playlist: %v", err)
+		error = true
+	}
 
-		song, err := client.GetTrack(spotify.ID(spotifyUrl))
-		if err != nil {
-			log.Printf("Couldn't get song: %v", err)
-			break
-		}
+	song, err := client.GetTrack(spotify.ID(spotifyUrl))
+	if err != nil {
+		log.Printf("Couldn't get song: %v", err)
+		error = true
+	}
 
-		_, err = client.AddTracksToPlaylist(playlist.ID, song.ID)
-		if err != nil {
-			log.Printf("Couldn't add track to playlist: %v", err)
-			break
-		}
+	_, err = client.AddTracksToPlaylist(playlist.ID, song.ID)
+	if err != nil {
+		log.Printf("Couldn't add track to playlist: %v", err)
+		error = true
+	}
 
+	if !error {
 		answer = "Added track to playlist!"
+	} else if answer == "" {
+		answer = "An unexpected error ocurred."
 	}
 
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, answer)
