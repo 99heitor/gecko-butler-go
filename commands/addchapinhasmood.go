@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"regexp"
 
+	"time"
+
 	"cloud.google.com/go/datastore"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/zmb3/spotify"
@@ -163,6 +165,11 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	bot.Send(msg)
 }
 
+type Chapinha struct {
+	Chosen     string
+	LastChosen time.Time
+}
+
 func ProximoChapinha(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	ctx := context.Background()
 	projectID := "geckobutler"
@@ -172,7 +179,8 @@ func ProximoChapinha(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		log.Printf("Failed to create client: %v", err)
 	}
 
-	query := datastore.NewQuery("Chapinha").Filter("Chosen = ", false).Order("LastChosen").KeysOnly()
+	//	query := datastore.NewQuery("Chapinha").Filter("Chosen = ", false).Order("LastChosen").KeysOnly()
+	query := datastore.NewQuery("Chapinha").KeysOnly()
 
 	var chapinhas []string
 
