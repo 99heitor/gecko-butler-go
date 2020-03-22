@@ -6,4 +6,5 @@ env_variables:
   SMMRY_KEY: $3
   SPOTIFY_ID: $4
   SPOTIFY_SECRET: $5
+  COMMIT_HASH: $6
 EOF

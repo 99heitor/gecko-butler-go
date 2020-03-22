@@ -59,6 +59,9 @@ func main() {
 
 		switch {
 
+		case strings.EqualFold(command, "version"):
+			commands.Version(bot, update)
+
 		case strings.EqualFold(command, "describe"):
 			commands.Describe(bot, update)
 

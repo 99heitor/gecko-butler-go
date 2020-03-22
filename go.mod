@@ -7,6 +7,7 @@ require (
 	github.com/technoweenie/multipartstreamer v1.0.1 // indirect
 	github.com/zmb3/spotify v0.0.0-20190520155326-158b1863f5b5
 	go.opencensus.io v0.22.0 // indirect
+	golang.org/dl v0.0.0-20200319204010-bf12898a6070 // indirect
 	golang.org/x/net v0.0.0-20190620200207-3b0461eec859 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sys v0.0.0-20190624142023-c5567b49c5d0 // indirect
