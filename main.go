@@ -11,6 +11,8 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
+const debugID = -180312761
+
 func main() {
 	bot := setupBot()
 	updates := bot.ListenForWebhook("/" + bot.Token)
@@ -45,9 +47,9 @@ func main() {
 		}
 
 		if update.Message.Chat.IsGroup() || update.Message.Chat.IsSuperGroup() {
-			log.Printf("Request from chat: %s", update.Message.Chat.Title)
+			log.Printf("Request from chat: %s %d", update.Message.Chat.Title, update.Message.Chat.ID)
 		} else {
-			log.Printf("Request from user: %s", update.Message.Chat.UserName)
+			log.Printf("Request from user: %s %d", update.Message.Chat.UserName, update.Message.Chat.ID)
 		}
 		if bot.Debug {
 			log.Printf("Update: %v", update.Message.Text)
@@ -72,7 +74,7 @@ func main() {
 		case strings.EqualFold(command, "addchapinhasmood"):
 			commands.AddChapinhasMood(bot, update)
 
-		case strings.EqualFold(command, "debug") && update.Message.Chat.ID == 36992723:
+		case strings.EqualFold(command, "debug") && update.Message.Chat.ID == debugID:
 			rsp := fmt.Sprintf("Switching debug mode to %t", !bot.Debug)
 			log.Printf(rsp)
 			bot.Debug = !bot.Debug

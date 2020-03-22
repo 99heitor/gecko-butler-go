@@ -4,14 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"log"
 
 	"net/http"
 	"os"
 	"reflect"
 	"regexp"
-
-	"time"
 
 	"cloud.google.com/go/datastore"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -22,76 +21,49 @@ import (
 var (
 	redirectURI = os.Getenv("APP_URL") + "/callback"
 	auth        = spotify.NewAuthenticator(redirectURI, spotify.ScopePlaylistModifyPublic, spotify.ScopePlaylistModifyPrivate)
-	ch          = make(chan *spotify.Client)
 )
 
-func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	var answer string
-	error := false
-	message := update.Message
-	string := ""
-	if message.ReplyToMessage != nil && message.ReplyToMessage.Text != "" {
-		string = message.ReplyToMessage.Text
-	}
-	if message.Text != "" {
-		string = string + " " + message.Text
-	}
-	log.Printf("Message %s", string)
-	var re, err = regexp.Compile(`https://open\.spotify\.com/track/([[:alnum:]]+)`)
-	if err != nil {
-		log.Printf("Failed to compile regex: %v", err)
-		error = true
-	}
+func getSpotifyId(message_body string) (spotify.ID, error) {
+	re := regexp.MustCompile(
+		`https://open\.spotify\.com/track/([[:alnum:]]+)`,
+	)
 
-	match := re.FindStringSubmatch(string)
+	match := re.FindStringSubmatch(message_body)
 	if (len(match)) == 0 {
-		error = true
-		answer = "Spotify link not found. Use the command /addchapinhasmood containing as a reply to a Spotify link."
+		return spotify.ID(""), errors.New("Spotify link not found")
 	}
+	return spotify.ID(match[1]), nil
+}
 
-	spotifyUrl := match[1]
-	log.Printf("You're requesting song " + spotifyUrl)
+const projectID = "geckobutler"
 
-	ctx := context.Background()
-	projectID := "geckobutler"
-
-	datastoreClient, err := datastore.NewClient(ctx, projectID)
-	if err != nil {
-		log.Printf("Failed to create client: %v", err)
-		error = true
-	}
-
-	kind := "oauth2.Token"
-	name := "spotifyToken"
-	key := datastore.NameKey(kind, name, nil)
-	log.Printf("Created key: %v", key)
+func getSpotifyClient(ctx context.Context, bot *tgbotapi.BotAPI, message *tgbotapi.Message, datastoreClient *datastore.Client) (*spotify.Client, error) {
+	key := datastore.NameKey("oauth2.Token", "spotifyToken", nil)
 
 	var token oauth2.Token
+	err := datastoreClient.Get(ctx, key, &token)
 
-	err = datastoreClient.Get(ctx, key, &token)
-
-	//Don't have any stored token, will have to obtain it
-	//now
+	//Don't have any stored token, will have to obtain it now
 	if err != nil {
-
 		state, err := GenerateRandomString(64)
 		if err != nil {
 			log.Printf("Couldn't generate random state")
-			error = true
+			return nil, errors.New("Couldn't generate random state")
 		}
 
 		url := auth.AuthURL(state)
 		log.Printf("Log in to spotify in the following url %v", url)
 
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, url)
-		msg.ReplyToMessageID = update.Message.MessageID
+		msg := tgbotapi.NewMessage(message.Chat.ID, url)
+		msg.ReplyToMessageID = message.MessageID
 
 		_, err = bot.Send(msg)
 		if err != nil {
 			log.Printf("Couldn't send authorization URI as message. Error: %v", err)
-			error = true
+			return nil, err
 		}
 
+		resultChannel := make(chan *spotify.Client)
 		http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 			tok, err := auth.Token(state, r)
 			if err != nil {
@@ -117,91 +89,122 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 			client := auth.NewClient(tok)
 			log.Printf("Login completed")
-			ch <- &client
+			resultChannel <- &client
 		})
+		return (<-resultChannel), nil
 	} else {
 		client := auth.NewClient(&token)
 		log.Printf("Login completed")
-		go func() { ch <- &client }()
+		return client, nil
+	}
+}
+
+func repluMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, text string) {
+	msg := tgbotapi.NewMessage(message.Chat.ID, text)
+	msg.ReplyToMessageID = message.MessageID
+	bot.Send(msg)
+}
+
+func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	message := update.Message
+
+	string := ""
+	if message.ReplyToMessage != nil {
+		string = message.ReplyToMessage.Text
+	}
+	string += string + " " + message.Text
+	log.Printf("Message %s", string)
+
+	spotifyID, err := getSpotifyId(string)
+	if err != nil {
+		repluMessage(bot, message, "Spotify link not found.")
+		return
+	}
+	log.Printf("You're requesting song " + spotifyID.String())
+
+	ctx := context.Background()
+	datastoreClient, err := datastore.NewClient(ctx, projectID)
+	if err != nil {
+		log.Printf("Failed to create client: %v", err)
+		repluMessage(bot, message, "An unexpected error ocurred.")
+		return
 	}
 
-	client := <-ch
+	client, err := getSpotifyClient(ctx, bot, message, datastoreClient)
+	if err != nil {
+		log.Printf("Couldn't get client. Error: %v", err)
+		repluMessage(bot, message, "An unexpected error ocurred.")
+		return
+	}
 
 	user, err := client.CurrentUser()
 	if err != nil {
 		log.Printf("Couldn't get current user. Error: %v", err)
-		error = true
-	} else {
-		log.Printf("Current user %v", user.DisplayName)
+		repluMessage(bot, message, "An unexpected error ocurred.")
+		return
 	}
+	log.Printf("Current user %v", user.DisplayName)
 
 	playlist, err := client.GetPlaylist("7cwB93saz58vHF9NAOBBFk")
 	if err != nil {
 		log.Printf("Couldn't get playlist: %v", err)
-		error = true
+		repluMessage(bot, message, "An unexpected error ocurred.")
+		return
 	}
 
-	song, err := client.GetTrack(spotify.ID(spotifyUrl))
+	song, err := client.GetTrack(spotifyID)
 	if err != nil {
 		log.Printf("Couldn't get song: %v", err)
-		error = true
+		repluMessage(bot, message, "An unexpected error ocurred.")
+		return
 	}
 
 	_, err = client.AddTracksToPlaylist(playlist.ID, song.ID)
 	if err != nil {
 		log.Printf("Couldn't add track to playlist: %v", err)
-		error = true
+		repluMessage(bot, message, "An unexpected error ocurred.")
+		return
 	}
 
-	if !error {
-		answer = "Added track to playlist!"
-	} else if answer == "" {
-		answer = "An unexpected error ocurred."
-	}
-
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, answer)
-	msg.ReplyToMessageID = update.Message.MessageID
-	msg.ParseMode = "Markdown"
-	bot.Send(msg)
+	repluMessage(bot, message, "Added track to playlist!")
 }
 
-type Chapinha struct {
-	Chosen     string
-	LastChosen time.Time
-}
+// type Chapinha struct {
+// 	Chosen     string
+// 	LastChosen time.Time
+// }
 
 func ProximoChapinha(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	ctx := context.Background()
-	projectID := "geckobutler"
+	// 	ctx := context.Background()
 
-	datastoreClient, err := datastore.NewClient(ctx, projectID)
-	if err != nil {
-		log.Printf("Failed to create client: %v", err)
-	}
+	// 	datastoreClient, err := datastore.NewClient(ctx, projectID)
+	// 	if err != nil {
+	// 		log.Printf("Failed to create client: %v", err)
+	// 	}
 
-	//	query := datastore.NewQuery("Chapinha").Filter("Chosen = ", false).Order("LastChosen").KeysOnly()
-	query := datastore.NewQuery("Chapinha").KeysOnly()
+	// 	//	query := datastore.NewQuery("Chapinha").Filter("Chosen = ", false).Order("LastChosen").KeysOnly()
+	// 	query := datastore.NewQuery("Chapinha").KeysOnly()
 
-	var chapinhas []string
+	// 	var chapinhas []string
 
-	_, err = datastoreClient.GetAll(ctx, query, &chapinhas)
-	log.Printf("Chapinhas result", chapinhas)
-	results := []interface{}{}
+	// 	_, err = datastoreClient.GetAll(ctx, query, &chapinhas)
+	// 	log.Printf("Chapinhas result", chapinhas)
+	// 	results := []interface{}{}
 
-	if err == nil {
-		for _, v := range chapinhas {
-			results = append(results, tgbotapi.NewInlineQueryResultArticle(v, v, v))
-		}
-	}
+	// 	if err == nil {
+	// 		for _, v := range chapinhas {
+	// 			results = append(results, tgbotapi.NewInlineQueryResultArticle(v, v, v))
+	// 		}
+	// 	}
 
-	inlineConf := tgbotapi.InlineConfig{
-		InlineQueryID: update.InlineQuery.ID,
-		Results:       results,
-	}
+	// 	inlineConf := tgbotapi.InlineConfig{
+	// 		InlineQueryID: update.InlineQuery.ID,
+	// 		Results:       results,
+	// 	}
 
-	if _, err := bot.AnswerInlineQuery(inlineConf); err != nil {
-		log.Println(err)
-	}
+	// 	if _, err := bot.AnswerInlineQuery(inlineConf); err != nil {
+	// 		log.Println(err)
+	// 	}
 }
 
 func GenerateRandomBytes(n int) ([]byte, error) {
