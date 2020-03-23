@@ -23,7 +23,7 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if message.ReplyToMessage != nil {
 		string = message.ReplyToMessage.Text
 	}
-	string += string + " " + message.Text
+	string += " " + message.Text
 	log.Printf("Message %s", string)
 
 	spotifyID, err := spotify.GetSpotifyId(string)
