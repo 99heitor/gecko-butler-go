@@ -15,7 +15,7 @@ func FetchExchangeToUSD(isocode string) (*CurrencyExchange, error) {
 	loc, _ := time.LoadLocation("America/Sao_Paulo")
 	nowBrazil := time.Now().In(loc)
 
-	url := fmt.Sprintf(url, now.Format("2006-01-02"), isocode)
+	url := fmt.Sprintf(url, nowBrazil.Format("2006-01-02"), isocode)
 
 	client := http.Client{}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -56,5 +56,5 @@ func FetchExchangeToUSD(isocode string) (*CurrencyExchange, error) {
 		return nil, errors.New("Failed to read 'conversionRate'")
 	}
 
-	return &CurrencyExchange{rate, now}, nil
+	return &CurrencyExchange{rate, nowBrazil}, nil
 }
