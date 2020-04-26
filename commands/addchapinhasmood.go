@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"log"
 
 	"github.com/99heitor/gecko-butler-go/spotify"
@@ -11,12 +12,16 @@ import (
 func replyMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, text string) {
 	msg := tgbotapi.NewMessage(message.Chat.ID, text)
 	msg.ReplyToMessageID = message.MessageID
+	msg.ParseMode = tgbotapi.ModeMarkdown
 	bot.Send(msg)
 }
 
-func showError(text string, bot *tgbotapi.BotAPI, message *tgbotapi.Message, err error) {
-	log.Printf(text+" Error: %v", err)
-	replyMessage(bot, message, "An unexpected error ocurred.")
+func showError(bot *tgbotapi.BotAPI, message *tgbotapi.Message, err error, errorText string, replyText string) {
+	log.Printf(errorText+" Error: %v", err)
+	if replyText == "" {
+		replyText = "An unexpected error ocurred."
+	}
+	replyMessage(bot, message, replyText)
 	return
 }
 
@@ -35,43 +40,46 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 	client, err := spotify.GetClient(ctx, bot, message)
 	if err != nil {
-		showError("Couldn't get spotify client.", bot, message, err)
+		showError(bot, message, err, "Couldn't get spotify client.", "")
 		return
 	}
 
 	user, err := client.CurrentUser()
 	if err != nil {
-		showError("Couldn't get current user.", bot, message, err)
+		showError(bot, message, err, "Couldn't get current user.", "")
 		return
 	}
 	log.Printf("Current user %v", user.DisplayName)
 
-	spotifyID, err := spotify.GetSpotifyId(client, string)
+	trackID, err := spotify.GetTrackId(client, string)
 	if err != nil {
-		replyMessage(bot, message, "Spotify link not found.")
+		showError(bot, message, err, "Couldn't get track id.", "Couldn't get track")
 		return
 	}
-	log.Printf("You're requesting song " + spotifyID.String())
+	log.Printf("You're requesting track " + trackID.String())
 
-	song, err := client.GetTrack(spotifyID)
+	track, err := client.GetTrack(trackID)
 	if err != nil {
-		showError("Couldn't get current song.", bot, message, err)
+		showError(bot, message, err, "Couldn't get track from id.", "Couldn't get track")
 		return
 	}
 
 	playlist, err := client.GetPlaylist("7cwB93saz58vHF9NAOBBFk")
 	if err != nil {
-		showError("Couldn't get playlist.", bot, message, err)
+		showError(bot, message, err, "Couldn't get playlist.", "")
 		return
 	}
 
-	_, err = client.AddTracksToPlaylist(playlist.ID, song.ID)
+	_, err = client.AddTracksToPlaylist(playlist.ID, track.ID)
 	if err != nil {
-		showError("Couldn't add track to playlist.", bot, message, err)
+		showError(bot, message, err, "Couldn't add track to playlist.", "")
 		return
 	}
 
-	replyMessage(bot, message, "Added track to playlist!")
+	trackURL := track.ExternalURLs["spotify"]
+	playlistURL := playlist.ExternalURLs["spotify"]
+
+	replyMessage(bot, message, "Successfully added ["+track.Name+"]("+trackURL+") to ["+playlist.Name+"]("+playlistURL+")! ✨")
 }
 
 // type Chapinha struct {
