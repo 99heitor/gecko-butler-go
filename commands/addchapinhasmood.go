@@ -1,19 +1,23 @@
 package commands
 
 import (
-	"cloud.google.com/go/datastore"
 	"context"
+	"log"
+
 	"github.com/99heitor/gecko-butler-go/spotify"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
-	"log"
 )
-
-const projectID = "geckobutler"
 
 func replyMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, text string) {
 	msg := tgbotapi.NewMessage(message.Chat.ID, text)
 	msg.ReplyToMessageID = message.MessageID
 	bot.Send(msg)
+}
+
+func showError(text string, bot *tgbotapi.BotAPI, message *tgbotapi.Message, err error) {
+	log.Printf(text+" Error: %v", err)
+	replyMessage(bot, message, "An unexpected error ocurred.")
+	return
 }
 
 func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
@@ -26,56 +30,44 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	string += " " + message.Text
 	log.Printf("Message %s", string)
 
-	spotifyID, err := spotify.GetSpotifyId(string)
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+
+	client, err := spotify.GetClient(ctx, bot, message)
+	if err != nil {
+		showError("Couldn't get spotify client.", bot, message, err)
+		return
+	}
+
+	user, err := client.CurrentUser()
+	if err != nil {
+		showError("Couldn't get current user.", bot, message, err)
+		return
+	}
+	log.Printf("Current user %v", user.DisplayName)
+
+	spotifyID, err := spotify.GetSpotifyId(client, string)
 	if err != nil {
 		replyMessage(bot, message, "Spotify link not found.")
 		return
 	}
 	log.Printf("You're requesting song " + spotifyID.String())
 
-	ctx, ctxCancel := context.WithCancel(context.Background())
-	defer ctxCancel()
-
-	datastoreClient, err := datastore.NewClient(ctx, projectID)
+	song, err := client.GetTrack(spotifyID)
 	if err != nil {
-		log.Printf("Failed to create client: %v", err)
-		replyMessage(bot, message, "An unexpected error ocurred.")
+		showError("Couldn't get current song.", bot, message, err)
 		return
 	}
-
-	client, err := spotify.GetSpotifyClient(ctx, bot, message, datastoreClient)
-	if err != nil {
-		log.Printf("Couldn't get client. Error: %v", err)
-		replyMessage(bot, message, "An unexpected error ocurred.")
-		return
-	}
-
-	user, err := client.CurrentUser()
-	if err != nil {
-		log.Printf("Couldn't get current user. Error: %v", err)
-		replyMessage(bot, message, "An unexpected error ocurred.")
-		return
-	}
-	log.Printf("Current user %v", user.DisplayName)
 
 	playlist, err := client.GetPlaylist("7cwB93saz58vHF9NAOBBFk")
 	if err != nil {
-		log.Printf("Couldn't get playlist: %v", err)
-		replyMessage(bot, message, "An unexpected error ocurred.")
-		return
-	}
-
-	song, err := client.GetTrack(spotifyID)
-	if err != nil {
-		log.Printf("Couldn't get song: %v", err)
-		replyMessage(bot, message, "An unexpected error ocurred.")
+		showError("Couldn't get playlist.", bot, message, err)
 		return
 	}
 
 	_, err = client.AddTracksToPlaylist(playlist.ID, song.ID)
 	if err != nil {
-		log.Printf("Couldn't add track to playlist: %v", err)
-		replyMessage(bot, message, "An unexpected error ocurred.")
+		showError("Couldn't add track to playlist.", bot, message, err)
 		return
 	}
 
