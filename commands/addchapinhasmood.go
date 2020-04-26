@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log"
+	"os"
+	"strconv"
 
 	"github.com/99heitor/gecko-butler-go/spotify"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -27,6 +29,13 @@ func showError(bot *tgbotapi.BotAPI, message *tgbotapi.Message, err error, error
 
 func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	message := update.Message
+	chatID := strconv.FormatInt(message.Chat.ID, 10)
+
+	if chatID != os.Getenv("ALLOWED_CHAT_ID") {
+		errorText := "Chat not allowed"
+		showError(bot, message, errors.New(errorText), errorText, errorText)
+		return
+	}
 
 	string := ""
 	if message.ReplyToMessage != nil {
