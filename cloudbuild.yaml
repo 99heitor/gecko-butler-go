@@ -1,6 +1,6 @@
 steps:
 - name: "debian"
-  args: ["bash", "./generate_prod_config.sh", "${_TELEGRAM_TOKEN}", "${_APP_URL}", "${_SMMRY_KEY}", "${_SPOTIFY_ID}", "${_SPOTIFY_SECRET}", "$SHORT_SHA"]
+  args: ["bash", "./generate_prod_config.sh", "${_TELEGRAM_TOKEN}", "${_APP_URL}", "${_SMMRY_KEY}", "${_SPOTIFY_ID}", "${_SPOTIFY_SECRET}", "$SHORT_SHA", "${_ALLOWED_CHAT_ID}"]
 - name: "gcr.io/cloud-builders/gcloud"
   args: ["app", "deploy", "app_prod.yaml", "-v", "gcloud-snapshot"]
 timeout: "1600s"
