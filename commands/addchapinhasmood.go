@@ -37,13 +37,6 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		return
 	}
 
-	string := ""
-	if message.ReplyToMessage != nil {
-		string = message.ReplyToMessage.Text
-	}
-	string += " " + message.Text
-	log.Printf("Message %s", string)
-
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	defer ctxCancel()
 
@@ -60,7 +53,7 @@ func AddChapinhasMood(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	}
 	log.Printf("Current user %v", user.DisplayName)
 
-	trackID, err := spotify.GetTrackId(client, string)
+	trackID, err := spotify.GetTrackId(client, message)
 	if err != nil {
 		showError(bot, message, err, "Couldn't get track id.", "Couldn't get track")
 		return
