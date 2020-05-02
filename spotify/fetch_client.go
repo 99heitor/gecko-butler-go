@@ -1,18 +1,19 @@
 package spotify
 
 import (
-	"cloud.google.com/go/datastore"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
-	"github.com/zmb3/spotify"
-	"golang.org/x/oauth2"
 	"log"
 	"net/http"
 	"os"
 	"reflect"
+
+	"cloud.google.com/go/datastore"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/zmb3/spotify"
+	"golang.org/x/oauth2"
 )
 
 var (
@@ -36,11 +37,23 @@ func generateRandomString(s int) (string, error) {
 	return base64.URLEncoding.EncodeToString(b), err
 }
 
-func GetSpotifyClient(ctx context.Context, bot *tgbotapi.BotAPI, message *tgbotapi.Message, datastoreClient *datastore.Client) (*spotify.Client, error) {
+func GetToken(ctx context.Context, bot *tgbotapi.BotAPI, message *tgbotapi.Message) (*oauth2.Token, error) {
+	if len(os.Getenv("SPOTIFY_TOKEN")) > 0 {
+		token := oauth2.Token{}
+		token.AccessToken = os.Getenv("SPOTIFY_TOKEN")
+		return &token, nil
+	}
+
+	datastoreClient, err := datastore.NewClient(ctx, projectID)
+	if err != nil {
+		log.Printf("Failed to get token: %v", err)
+		return nil, err
+	}
+
 	key := datastore.NameKey("oauth2.Token", "spotifyToken", nil)
 
 	var token oauth2.Token
-	err := datastoreClient.Get(ctx, key, &token)
+	err = datastoreClient.Get(ctx, key, &token)
 
 	//Don't have any stored token, will have to obtain it now
 	if err != nil {
@@ -62,7 +75,7 @@ func GetSpotifyClient(ctx context.Context, bot *tgbotapi.BotAPI, message *tgbota
 			return nil, err
 		}
 
-		resultChannel := make(chan *spotify.Client)
+		resultChannel := make(chan *oauth2.Token)
 		http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 			tok, err := auth.Token(state, r)
 			if err != nil {
@@ -85,15 +98,15 @@ func GetSpotifyClient(ctx context.Context, bot *tgbotapi.BotAPI, message *tgbota
 				http.NotFound(w, r)
 				return
 			}
-
-			client := auth.NewClient(tok)
-			log.Printf("Login completed")
-			resultChannel <- &client
+			resultChannel <- tok
 		})
 		return (<-resultChannel), nil
-	} else {
-		client := auth.NewClient(&token)
-		log.Printf("Login completed")
-		return &client, nil
 	}
+	return &token, nil
+}
+
+func GetClient(ctx context.Context, bot *tgbotapi.BotAPI, message *tgbotapi.Message) (*spotify.Client, error) {
+	token, err := GetToken(ctx, bot, message)
+	client := auth.NewClient(token)
+	return &client, err
 }

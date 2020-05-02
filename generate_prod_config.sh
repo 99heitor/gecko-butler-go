@@ -7,4 +7,5 @@ env_variables:
   SPOTIFY_ID: $4
   SPOTIFY_SECRET: $5
   COMMIT_HASH: $6
+  ALLOWED_CHAT_ID: $7
 EOF
