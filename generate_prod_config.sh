@@ -1,5 +1,8 @@
 cat >app_prod.yaml << EOF
 runtime: go111
+automatic_scaling:
+  min_instances: 0
+  max_instances: 1
 env_variables:
   TELEGRAM_TOKEN: $1
   APP_URL: $2
